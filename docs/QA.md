@@ -3,13 +3,14 @@
 - Datum: 2026-11-12
 - Version: `bundesanzeiger 0.1.0`
 - Commit: `8dda94d` (frisch per `pipx install git+https://github.com/smlfg/bundesanzeiger-cli`)
+- Nachprüfung: Fixes `1a180b8` und `7280703`, Live-Aufrufe vom 2026-11-12
 - Prüfer: unabhängige QA-Iteration (nicht Entwickler), nur lesende Live-Aufrufe
 - Umgebung: `PATH=./scratch/pipx/bin`, isoliertes `HOME`/`XDG_*` unter `./scratch/qa`, Pseudo-Terminal über `script -qc`, Fake-Server `tests/harness/fake_server.py` mit den `ux-routes` aus `docs/UX.md`
 - Belege: Protokolle unter `./scratch/qa/` (nicht versioniert). Auszüge stehen in der Tabelle.
 
 ## Ergebnis
 
-**48 von 50 Prüfungen OK, 2 FAIL.** Offene FAILs: siehe unten und `scratch/QA-FAILS.md`.
+**50 von 50 Prüfungen OK.** Beide vorherigen FAILs wurden behoben und live nachgeprüft; Details unter „Behobene FAILs“.
 
 ## Prüftabelle
 
@@ -21,7 +22,7 @@
 | Unterkommando-Hilfen | `bundesanzeiger suche\|lesen\|neu --help` | Jeweils Exit 0 | OK | `scratch/qa/help-*.err` leer, Exit 0 |
 | Versionsausgabe | `bundesanzeiger --version` | Exit 0 | OK | `bundesanzeiger 0.1.0`, Exit 0 |
 | README: Suche im TTY | `bundesanzeiger suche "Deutsche Bahn AG"` | Lesbarer Text, 6200 Treffer | OK | `scratch/qa/01-suche.log`: `Suche „Deutsche Bahn AG“: 6200 Treffer, 3 angezeigt` |
-| README: Volltext im TTY | `bundesanzeiger lesen "Deutsche Bahn AG"` | Firma, Titel/Zeile, dann Volltext gemäß `INTERFACE.md` | FAIL | `scratch/qa/02-lesen.log`: Vor dem Fließtext stehen zusätzlich `Deutsche Bahn Aktiengesellschaft`, `Berlin`, `Hinweisbekanntmachung` und `(gemäß …)` doppelt |
+| README: Volltext im TTY | `bundesanzeiger lesen "Deutsche Bahn AG"` | Firma, Titel/Zeile, dann Volltext gemäß `INTERFACE.md` | OK (nach Fix `1a180b8`) | `scratch/qa/s6-lesen.log`: Kopfzeile, danach direkt `Die Deutsche Bahn Aktiengesellschaft mit Sitz in Berlin …`; keine doppelten Kopfdaten |
 | README: Finanzindex | `bundesanzeiger suche "Deutsche Bahn AG" --bereich finanzberichte` | 993 Treffer, Bereich korrekt | OK | `scratch/qa/03-suche-finanz.log` |
 | README: Captcha-Hinweis | `bundesanzeiger lesen "Deutsche Bahn AG" --bereich finanzberichte` | Exit 0, kein Lösen, Such-URL | OK | `scratch/qa/04-lesen-finanz.log`, Exit 0 |
 | README: `neu` erster Aufruf | `bundesanzeiger neu "Deutsche Bahn AG"` | Ausgangsstand gespeichert | OK | `scratch/qa/05-neu.log` |
@@ -59,18 +60,20 @@
 | Keine dauerhaften Cookies | Mehrere Live-Aufrufe | Keine Cookie-/Session-Datei im HOME | OK | `find scratch/qa/home -type f` = 0 |
 | Keine schreibenden Requests | Fake-Server-Protokoll | Nur GET | OK | `scratch/qa/07-fake.log`: 25× GET |
 | Captcha wird nicht gelöst | `lesen ... --bereich finanzberichte --json` | `captcha_erforderlich=true`, Exit 0, kein POST | OK | `scratch/qa/31-captcha.json` |
-| Captcha-URL im Browser nutzbar | Ohne Session: GET der ausgegebenen URL | Zeigt die Trefferliste/das Dokument im Browser | FAIL | `https://www.bundesanzeiger.de/pub/de/suchen2?4` leitet ohne Session auf `.../suchen2?0` um; Seite enthält weder „Deutsche Bahn“ noch „993“ (`scratch/qa/31-captcha.json`) |
+| Captcha-URL im Browser nutzbar | Ohne Session: GET der ausgegebenen URL | Zeigt die Trefferliste/das Dokument im Browser | OK (nach Fix `7280703`) | `https://www.bundesanzeiger.de/pub/de/suchen2?0` liefert ohne Session HTTP 200, bleibt auf der URL, `data-count=17439465`, 22 Trefferzeilen im Suchergebnis-Index (`scratch/qa/s6-captcha-browser.json`, `s6-captcha-browser.html`) |
 | JSON-Schemata | `suche`, `lesen`, `neu`, Captcha, Fehler | Erwartete Schlüssel, valides JSON | OK | `scratch/qa/25-neu.json`, `29-suche.json`, `30-lesen.json`, `31-captcha.json`, `35-fake-json.log` |
-| Unit-/Akzeptanztests | `scratch/venv/bin/pytest -q` | Grün | OK | `52 passed in 49.30s` (`scratch/qa/pytest.log`) |
-| UX-Gate voll | `python3 tests/harness/ux_check.py . --venv scratch/tmp/qa-ux-venv` | Kein FAIL | OK | `PASS`, UX00–UX08 PASS, UX09 SKIP (`scratch/qa/ux-check.log`) |
-| UX-Sitzungen | `python3 tests/harness/ux_session.py . --venv scratch/tmp/qa-session-venv` | Alle Sitzungen PASS | OK | 5/5 PASS (`scratch/qa/ux-session.log`) |
+| Unit-/Akzeptanztests | `scratch/venv/bin/pytest -q` | Grün | OK | `53 passed in 69.12s` (`scratch/qa/s6-pytest.log`) |
+| UX-Gate voll | `python3 tests/harness/ux_check.py .` | Kein FAIL | OK | `PASS`, UX00–UX08 PASS, UX09 SKIP (`scratch/qa/s6-ux-check.log`) |
+| UX-Sitzungen | `python3 tests/harness/ux_session.py .` | Alle Sitzungen PASS | OK | 5/5 PASS (`scratch/qa/s6-ux-session.log`) |
 
-## Offene FAILs
+## Behobene FAILs
 
-1. **Volltextausgabe enthält doppelte Kopfdaten.**
-   `bundesanzeiger lesen "Deutsche Bahn AG"` gibt vor dem Fließtext erneut Firma, Sitz und Titel aus. Das weicht vom Textbeispiel in `INTERFACE.md` und `docs/UX.md` ab.
-   Beleg: `scratch/qa/02-lesen.log`, `scratch/qa/18-fake-lesen-tty.log`.
-
-2. **Captcha-Hinweis nennt eine sitzungsgebundene URL, die im Browser nicht funktioniert.**
-   Die ausgegebene URL `https://www.bundesanzeiger.de/pub/de/suchen2?4` ist an die CLI-Session gebunden. Ein frischer Browser-/HTTP-Aufruf ohne diese Session wird auf `.../suchen2?0` umgeleitet und zeigt keine Trefferliste. Der Hinweis „im Browser öffnen“ führt damit nicht zum erwarteten Index.
-   Beleg: `scratch/qa/31-captcha.json`; Gegenprobe ohne Session: HTTP 200, finale URL `.../suchen2?0`, kein „Deutsche Bahn“, keine „993“.
+1. **Volltextausgabe enthielt doppelte Kopfdaten (behoben in `1a180b8`).**
+   `parse_publication` überspringt die Titel-Elemente (`z_titel`), sodass nach der
+   CLI-Kopfzeile direkt der Fließtext beginnt. Live nachgeprüft:
+   `scratch/qa/s6-lesen.log`.
+2. **Captcha-Hinweis nannte eine sitzungsgebundene URL (behoben in `7280703`).**
+   Der Hinweis verweist jetzt auf den sessionfreien Suchergebnis-Index
+   `https://www.bundesanzeiger.de/pub/de/suchen2?0`; die gefilterte Trefferliste
+   bleibt in der CLI-Session. Gegenprobe ohne Session: HTTP 200, `data-count=17439465`,
+   Trefferzeilen sichtbar (`scratch/qa/s6-captcha-browser.json`).
