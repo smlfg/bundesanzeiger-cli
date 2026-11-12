@@ -137,20 +137,22 @@ def _json_mode(args: argparse.Namespace, argv: list[str]) -> bool:
 def _validate_date(value: str) -> str:
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise UsageError(
-            "Ungültiges Datum für --seit – erwartet JJJJ-MM-TT."
+            "Ungültiges Datum für --seit – erwartet JJJJ-MM-TT, "
+            "z. B. 2025-01-01."
         )
     try:
         date.fromisoformat(value)
     except ValueError as exc:
         raise UsageError(
-            "Ungültiges Datum für --seit – erwartet JJJJ-MM-TT."
+            "Ungültiges Datum für --seit – erwartet JJJJ-MM-TT, "
+            "z. B. 2025-01-01."
         ) from exc
     return value
 
 
 def _validate_limit(value: int) -> int:
     if value < 1 or value > 50:
-        raise UsageError("--limit muss zwischen 1 und 50 liegen.")
+        raise UsageError("--limit muss zwischen 1 und 50 liegen – z. B. --limit 3.")
     return value
 
 
