@@ -29,7 +29,6 @@ weiterarbeiten kann.
 
 ```ux-session
 $ pipx install git+https://github.com/smlfg/bundesanzeiger-cli
-< bundesanzeiger
 $ bundesanzeiger suche "Deutsche Bahn AG"
 < Suche „Deutsche Bahn AG“: 6200 Treffer, 3 angezeigt
 < 1) 22.07.2026 · Gesellschaftsbekanntmachungen · Deutsche Bahn Aktiengesellschaft (Berlin)
