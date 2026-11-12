@@ -136,7 +136,7 @@ class BundesanzeigerClient:
         self._warmed = False
         self._hidden_name = ""
         self._hidden_value = ""
-        self.search_url = ""
+        self.index_url = self.base_url + "/pub/de/suchen2?0"
 
     def _request_text(
         self,
@@ -221,7 +221,6 @@ class BundesanzeigerClient:
             self.base_url + "/pub/de/start", params, use_cache=use_cache
         )
         page = parse_search(text, self.base_url)
-        self.search_url = final_url
         return SearchResult(
             suchbegriff=suchbegriff,
             bereich=bereich,
@@ -235,12 +234,12 @@ class BundesanzeigerClient:
             message = (
                 "Jahresabschluss ist auf bundesanzeiger.de durch ein Captcha "
                 "geschützt – im Browser öffnen:\n"
-                f"{self.search_url or final_url}"
+                f"{self.index_url}"
             )
             return DetailResult(
                 text=message,
                 captcha=True,
-                url=self.search_url or final_url,
+                url=self.index_url,
             )
         if "/pub/de/start" in final_url and "fulltext" in final_url:
             raise NetworkError("Keine gültige Session – erneut suchen.")

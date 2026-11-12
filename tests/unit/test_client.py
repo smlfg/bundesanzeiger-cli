@@ -86,13 +86,15 @@ def test_read_returns_text_for_publication():
     assert "Beyond1435" in detail.text
 
 
-def test_read_detects_captcha_and_returns_search_url():
+def test_read_detects_captcha_and_returns_browser_index_url():
     client = BundesanzeigerClient("http://fake.invalid", session=DummySession())
     result = client.search("Deutsche Bahn AG", "finanzberichte")
     detail = client.read(result.page.treffer[0])
     assert detail.captcha is True
     assert "Captcha" in detail.text
-    assert detail.url.startswith("http")
+    assert detail.url == "http://fake.invalid/pub/de/suchen2?0"
+    assert detail.url in detail.text
+    assert "/pub/de/suchen2?3" not in detail.text
 
 
 def test_network_error_maps_to_exit_code_three():
