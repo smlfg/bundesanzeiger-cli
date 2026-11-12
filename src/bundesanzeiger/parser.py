@@ -254,11 +254,16 @@ def _row_entries(root: Node, base_url: str) -> list[Entry]:
         name_lines = clean_lines(text_content(first))
         firma = name_lines[0] if name_lines else ""
         sitz = " ".join(name_lines[1:]) if len(name_lines) > 1 else ""
+        raw_date = text_content(date)
+        if not firma or not DATE_RE.search(raw_date):
+            continue
 
         part = first_with_class(row, "part")
         bereich = clean_area(text_content(part)) if part is not None else ""
         titel = clean_text(text_content(anchor))
         href = anchor.attrs.get("href", "")
+        if not titel or not href:
+            continue
         url = urljoin(base_url.rstrip("/") + "/", href)
         entries.append(
             Entry(

@@ -69,3 +69,20 @@ def test_captcha_detail_is_detected():
 
 def test_german_date_roundtrip():
     assert german_date("2026-07-22") == "22.07.2026"
+
+def test_search_ignores_pager_rows_without_company_and_date():
+    html = """
+    <div class="row"><div class="first"></div>
+      <div class="info"><a href="/pub/de/suchergebnis?0">Seitenzahl</a></div>
+      <div class="date">von</div></div>
+    <div class="row back">
+      <div class="first">Beispielfirma AG<br/>Berlin</div>
+      <div class="part">Gesellschafts-<br/>bekanntmachungen</div>
+      <div class="info"><a href="/pub/de/suchergebnis?1">Titel</a></div>
+      <div class="date">22.07.2026</div>
+    </div>
+    """
+    page = parse_search(html, "https://example.invalid")
+    assert page.gesamt == 1
+    assert len(page.treffer) == 1
+    assert page.treffer[0].firma == "Beispielfirma AG"
