@@ -84,6 +84,32 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json_option(suche)
     suche.set_defaults(handler=_cmd_suche)
 
+    lesen = subparsers.add_parser(
+        "lesen",
+        help="Volltext des N-ten Treffers lesen.",
+        description=(
+            "Volltext des N-ten Treffers lesen. Der Volltext wird über eine "
+            "frische Suche in derselben Session geholt."
+        ),
+    )
+    lesen.add_argument("suchbegriff", metavar="FIRMA", help="Suchbegriff.")
+    lesen.add_argument(
+        "nummer",
+        metavar="NR",
+        nargs="?",
+        type=int,
+        default=None,
+        help="Treffernummer, Default 1.",
+    )
+    _add_area_option(lesen)
+    lesen.add_argument(
+        "--erster",
+        action="store_true",
+        help="Bei mehreren Firmen ohne TTY automatisch den ersten Treffer lesen.",
+    )
+    _add_json_option(lesen)
+    lesen.set_defaults(handler=_cmd_lesen)
+
     return parser
 
 
@@ -202,6 +228,107 @@ def _cmd_suche(args: argparse.Namespace, argv: list[str]) -> int:
         print(json.dumps(payload, ensure_ascii=False))
     else:
         _print_search(args.suchbegriff, args.bereich, result.page, shown)
+    return 0
+
+
+def _choose_entry(
+    entries: list[Entry], nummer: int | None, erster: bool
+) -> Entry:
+    if not entries:
+        raise UsageError(
+            "Keine Treffer zum Lesen – Suchbegriff prüfen oder `suche` verwenden."
+        )
+    nr = 1 if erster or nummer is None else nummer
+    if nr < 1:
+        raise UsageError("NR muss mindestens 1 sein.")
+
+    firms: list[tuple[str, str]] = []
+    for entry in entries:
+        key = (entry.firma, entry.sitz)
+        if key not in firms:
+            firms.append(key)
+
+    candidates = entries
+    if len(firms) > 1 and not erster:
+        listing = "\n".join(
+            f"{index}) {firma}" + (f" ({sitz})" if sitz else "")
+            for index, (firma, sitz) in enumerate(firms, start=1)
+        )
+        if not sys.stdin.isatty():
+            raise UsageError(
+                "Mehrere Firmen gefunden:\n"
+                + listing
+                + "\nNächster Schritt: --erster verwenden oder mit `suche` "
+                "den gewünschten Treffer eingrenzen."
+            )
+        print("Mehrere Firmen gefunden:", file=sys.stderr)
+        print(listing, file=sys.stderr)
+        print(
+            f"Firma wählen [1-{len(firms)}]: ",
+            end="",
+            file=sys.stderr,
+            flush=True,
+        )
+        answer = sys.stdin.readline()
+        if not answer:
+            raise UsageError(
+                "Keine Auswahl erhalten – erneut starten oder --erster verwenden."
+            )
+        try:
+            choice = int(answer.strip())
+        except ValueError as exc:
+            raise UsageError(
+                "Ungültige Auswahl – eine Nummer aus der Liste eingeben."
+            ) from exc
+        if choice < 1 or choice > len(firms):
+            raise UsageError(
+                f"Ungültige Auswahl – Zahl zwischen 1 und {len(firms)} eingeben."
+            )
+        firma, sitz = firms[choice - 1]
+        candidates = [
+            entry for entry in entries if (entry.firma, entry.sitz) == (firma, sitz)
+        ]
+
+    if nr > len(candidates):
+        raise UsageError(
+            f"Treffer {nr} nicht vorhanden – es gibt {len(candidates)} Treffer. "
+            "Kleinere NR wählen."
+        )
+    return candidates[nr - 1]
+
+
+def _cmd_lesen(args: argparse.Namespace, argv: list[str]) -> int:
+    client = BundesanzeigerClient()
+    result = client.search(args.suchbegriff, args.bereich, use_cache=False)
+    entry = _choose_entry(result.page.treffer, args.nummer, args.erster)
+    detail = client.read(entry)
+
+    if _json_mode(args, argv):
+        payload = {
+            "suchbegriff": args.suchbegriff,
+            "nummer": entry.nummer,
+            "datum": entry.datum,
+            "bereich": entry.bereich,
+            "firma": entry.firma,
+            "sitz": entry.sitz,
+            "titel": entry.titel,
+            "url": detail.url,
+            "captcha_erforderlich": detail.captcha,
+            "text": detail.text,
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0
+
+    if detail.captcha:
+        print(detail.text)
+        return 0
+
+    location = entry.firma
+    if entry.sitz:
+        location += f" ({entry.sitz})"
+    print(location)
+    print(f"{entry.titel} · {german_date(entry.datum)} · {entry.bereich}")
+    print(detail.text)
     return 0
 
 
