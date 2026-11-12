@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -11,6 +12,7 @@ from datetime import date
 from . import __version__
 from .client import AREA_CODES, AREA_NAMES, BundesanzeigerClient
 from .errors import BundesanzeigerError, UsageError
+from .state import MAX_KEYS, load_state, save_state
 from .parser import Entry, german_date
 
 
@@ -109,6 +111,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_json_option(lesen)
     lesen.set_defaults(handler=_cmd_lesen)
+
+    neu = subparsers.add_parser(
+        "neu",
+        help="Bekanntmachungen seit dem letzten Aufruf zeigen.",
+        description=(
+            "Bekanntmachungen zeigen, die seit dem letzten erfolgreichen Aufruf "
+            "für denselben Suchbegriff und Bereich neu sind."
+        ),
+    )
+    neu.add_argument("suchbegriff", metavar="FIRMA", help="Suchbegriff.")
+    _add_area_option(neu)
+    _add_json_option(neu)
+    neu.set_defaults(handler=_cmd_neu)
 
     return parser
 
@@ -329,6 +344,112 @@ def _cmd_lesen(args: argparse.Namespace, argv: list[str]) -> int:
     print(location)
     print(f"{entry.titel} · {german_date(entry.datum)} · {entry.bereich}")
     print(detail.text)
+    return 0
+
+
+def _entry_key(entry: Entry) -> str:
+    return f"{entry.datum}|{entry.firma}|{entry.titel}"
+
+
+def _today() -> str:
+    value = os.environ.get("BUNDESANZEIGER_HEUTE", "")
+    if value and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            pass
+        else:
+            return value
+    return date.today().isoformat()
+
+
+def _cmd_neu(args: argparse.Namespace, argv: list[str]) -> int:
+    client = BundesanzeigerClient()
+    result = client.search(args.suchbegriff, args.bereich, use_cache=False)
+    entries = result.page.treffer
+
+    state = load_state()
+    key = f"{args.bereich or 'alle'}|{args.suchbegriff.strip().casefold()}"
+    previous = state["eintraege"].get(key)
+    erster_aufruf = previous is None
+
+    previous_keys: set[str] = set()
+    previous_datum = ""
+    if isinstance(previous, dict):
+        raw_keys = previous.get("keys")
+        if isinstance(raw_keys, list):
+            previous_keys = {str(item) for item in raw_keys}
+        previous_datum = str(previous.get("datum") or "")
+
+    if erster_aufruf:
+        new_entries: list[Entry] = []
+    else:
+        new_entries = [
+            entry
+            for entry in entries
+            if _entry_key(entry) not in previous_keys
+            and (not previous_datum or entry.datum >= previous_datum)
+        ]
+
+    all_keys = list(previous_keys)
+    for entry in entries:
+        entry_key = _entry_key(entry)
+        if entry_key not in all_keys:
+            all_keys.append(entry_key)
+    all_keys = all_keys[-MAX_KEYS:]
+
+    dates = [entry.datum for entry in entries if entry.datum]
+    if previous_datum:
+        dates.append(previous_datum)
+    newest = max(dates) if dates else previous_datum
+    state["eintraege"][key] = {
+        "datum": newest,
+        "keys": all_keys,
+        "stand": _today(),
+    }
+    try:
+        save_state(state)
+    except OSError as exc:
+        raise BundesanzeigerError(
+            "Zustand konnte nicht gespeichert werden – Schreibrechte unter "
+            "XDG_STATE_HOME prüfen."
+        ) from exc
+
+    neueste = entries[0] if entries else None
+    if _json_mode(args, argv):
+        payload = {
+            "suchbegriff": args.suchbegriff,
+            "bereich": args.bereich,
+            "erster_aufruf": erster_aufruf,
+            "neue_treffer": [entry.as_json() for entry in new_entries],
+            "neueste": (
+                {"datum": neueste.datum, "titel": neueste.titel}
+                if neueste is not None
+                else None
+            ),
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0
+
+    if erster_aufruf:
+        print("Erster Aufruf – Ausgangsstand gespeichert.")
+        if neueste is not None:
+            print(
+                f"Neueste Bekanntmachung: {german_date(neueste.datum)} · "
+                f"{neueste.titel}"
+            )
+        else:
+            print("Keine Bekanntmachungen gefunden.")
+        print("Beim nächsten Aufruf erscheinen nur neuere Bekanntmachungen.")
+        return 0
+
+    if not new_entries:
+        print("Keine neuen Bekanntmachungen seit dem letzten Aufruf.")
+        return 0
+
+    print("Neue Bekanntmachungen seit dem letzten Aufruf:")
+    for index, entry in enumerate(new_entries, start=1):
+        print(_entry_line(index, entry))
     return 0
 
 
