@@ -1,92 +1,128 @@
-# UX-Spec: kurstool
+# UX-Spec: bundesanzeiger
 
-Diese Datei ist die Vorlage für `docs/UX.md` in jedem neuen Repo. Sie wird vor der ersten Codezeile ausgefüllt. Alle Befehle sind so abtippbar, wie ein Mensch sie im Terminal eingibt. Beispielwerte (Tool `kurstool`, Kursnummern, Mails auf `.invalid`) werden durch die echten Werte des Projekts ersetzt.
-
-Ablauf beim Ausfüllen:
-
-1. Website live öffnen und die drei wichtigsten Aufgaben eines Menschen heraussuchen.
-2. Jede Aufgabe als Sitzung mitschreiben: Befehl, Eingabe, erwartete Ausgabe.
-3. Lesende Routen und alle Formularschritte der schreibenden Aktion ergänzen.
-4. Fixtures unter `tests/fixtures/ux/` ablegen.
-5. `python tests/harness/ux_check.py --spec-only` laufen lassen; erst bei grünem UX01 weiterbauen.
+Diese Datei beschreibt die wichtigsten Aufgaben eines Menschen mit dem
+Bundesanzeiger (bundesanzeiger.de) als abtippbare Terminal-Sitzungen. Alle
+Befehle sind so formuliert, wie sie im Terminal eingegeben werden. Das Tool ist
+rein lesend: Es gibt keine Login-Pflicht, keine schreibende Aktion und daher
+keine `ux-formsteps`; Jahresabschlüsse bleiben wegen des Captchas ein reiner
+Index.
 
 ## Meta
 
-Das Meta-Objekt benennt den Befehlsnamen im PATH, den Installationsbefehl und alle Umgebungsvariablen. `base_url_env` ist Pflicht, sobald es Routen oder Formsteps gibt. `credential_env` führt dazu, dass das Tool einen `login`-Befehl haben muss.
-
 ```ux-meta
-{"tool": "kurstool",
- "install": "pipx install git+https://github.com/smlfg/kurstool-cli",
- "base_url_env": "KURSTOOL_BASE_URL",
- "env": {"KURSTOOL_STATUSGRUPPE": "studierende"},
- "credential_env": ["KURSTOOL_LOGIN_USER", "KURSTOOL_LOGIN_PASSWORD"]}
+{"tool": "bundesanzeiger",
+ "install": "pipx install git+https://github.com/smlfg/bundesanzeiger-cli",
+ "base_url_env": "BUNDESANZEIGER_BASE_URL",
+ "env": {"BUNDESANZEIGER_HEUTE": "2026-11-12"}}
 ```
+
+`BUNDESANZEIGER_HEUTE` dient nur dazu, datumsabhängige Befehle wie `neu` in
+Tests deterministisch zu machen; im Alltag wird das heutige Datum verwendet.
 
 ## Sitzungen
 
-Jede Sitzung ist eine Nutzer-Aufgabe. Es müssen mindestens drei sein, darunter Login, Suche per Name und eine schreibende Aktion. `$` ist ein Befehl, `>` eine Eingabe, `<` eine erwartete Ausgabe und `!` der erwartete Exit-Code. Der Installationsbefehl wird von der Harness durch eine lokale Installation in ein frisches venv ersetzt.
+### Installation und erste Suche
 
-### Installation und Login
-
-Der Login fragt im Terminal interaktiv nach Benutzer und Passwort. Das Passwort wird nicht angezeigt und nicht gespeichert; die Sitzung landet im Schlüsselbund oder in einer Datei mit Rechten 0600. Die Zugangsdaten stammen aus einem Testkonto, nie aus echten Daten.
+Die Installation landet mit `pipx` im PATH. Der Suchbegriff ist positional; die
+Ausgabe zeigt Datum, Bereich, Firma und Titel, damit ein Mensch ohne Nachschlagen
+weiterarbeiten kann.
 
 ```ux-session
-$ pipx install git+https://github.com/smlfg/kurstool-cli
-< kurstool
-$ kurstool login
-< Benutzer:
-> max.mustermann@example.invalid
-< Passwort:
-> geheim
-< Login erfolgreich
+$ pipx install git+https://github.com/smlfg/bundesanzeiger-cli
+< bundesanzeiger
+$ bundesanzeiger suche "Deutsche Bahn AG"
+< Suche „Deutsche Bahn AG“: 6200 Treffer, 3 angezeigt
+< 1) 22.07.2026 · Gesellschaftsbekanntmachungen · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Hinweisbekanntmachung (gemäß § 62 Abs. 4 Satz 3 i.V.m. Abs. 3 UmwG)
+< 2) 22.05.2025 · Gesellschaftsbekanntmachungen · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Hinweisbekanntmachung gemäß § 62 Abs. 4 Satz 3 i.V.m. Abs. 3 UmwG
+< 3) 15.05.2025 · Gesellschaftsbekanntmachungen · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Hinweisbekanntmachung gemäß § 62 Abs. 4 Satz 3 i.V.m. Abs. 3 UmwG
 ! exit 0
 ```
 
-### Kurse nach Namen suchen
+### Volltext einer Bekanntmachung lesen
 
-Der Suchbegriff ist positional. Die Ausgabe zeigt Namen und Kursnummer, damit ein Mensch ohne Nachschlagen weiterarbeiten kann.
+Ohne Nummer wird der erste Treffer gelesen. Der Volltext wird in derselben
+Session über eine frische Suche geholt, weil die Detail-Links ca. 30 Minuten
+sessiongebunden sind.
 
 ```ux-session
-$ kurstool search volleyball
-< 1) Volleyball Anfänger (Kurs 32304)
-< 2) Volleyball Fortgeschritten (Kurs 32305)
+$ bundesanzeiger lesen "Deutsche Bahn AG"
+< Deutsche Bahn Aktiengesellschaft (Berlin)
+< Hinweisbekanntmachung (gemäß § 62 Abs. 4 Satz 3 i.V.m. Abs. 3 UmwG) · 22.07.2026 · Gesellschaftsbekanntmachungen
+< Die Deutsche Bahn Aktiengesellschaft mit Sitz in Berlin, eingetragen im Handelsregister
+< des Amtsgerichts Charlottenburg unter HRB 50000 B, ist Alleingesellschafterin der
+< Beyond1435 GmbH mit Sitz in Berlin, eingetragen im Handelsregister des Amtsgerichts
+< Charlottenburg unter HRB 181864 B. Es ist beabsichtigt, die Beyond1435 GmbH nach §
+< 2 UmwG auf die Deutsche Bahn Aktiengesellschaft im Wege der Aufnahme durch Übertragung
+< ihres Vermögens als Ganzes zu verschmelzen.
 ! exit 0
 ```
 
-### Kurs verbindlich buchen
+### Jahresabschluss: Index und Captcha-Hinweis
 
-Die schreibende Aktion zeigt zuerst Kurs, Ort und Preis. Danach fragt sie mit Default Nein. Erst nach `j` werden alle Formularschritte bis zur endgültigen Bestätigung gesendet. Bei `N` endet der Befehl ohne Request an einen Schritt ohne `before_confirm`.
+Der Bereich `finanzberichte` zeigt weiterhin die Trefferliste (Index). Der
+Volltext eines Jahresabschlusses ist auf bundesanzeiger.de durch ein Captcha
+geschützt; das Tool löst oder umgeht es nicht, sondern nennt den nächsten Schritt.
 
 ```ux-session
-$ kurstool book "Volleyball Anfänger"
-< Kurs: Volleyball Anfänger (32304)
-< Ort: Sporthalle Nord
-< Preis: 25,00 EUR
-< Buchung verbindlich? [j/N]
-> j
-< Buchung bestätigt
-< Bestätigungsnummer: KB-2026-0042
+$ bundesanzeiger suche "Deutsche Bahn AG" --bereich finanzberichte
+< Suche „Deutsche Bahn AG“ (Rechnungslegung/Finanzberichte): 993 Treffer, 3 angezeigt
+< 1) 13.05.2022 · Rechnungslegung/Finanzberichte · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Jahresabschluss zum Geschäftsjahr vom 01.01.2021 bis zum 31.12.2021
+< 2) 12.05.2022 · Rechnungslegung/Finanzberichte · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Konzernabschluss zum Geschäftsjahr vom 01.01.2021 bis zum 31.12.2021
+< 3) 14.07.2021 · Rechnungslegung/Finanzberichte · Deutsche Bahn Aktiengesellschaft (Berlin)
+<    Jahresabschluss zum Geschäftsjahr vom 01.01.2020 bis zum 31.12.2020
+$ bundesanzeiger lesen "Deutsche Bahn AG" --bereich finanzberichte
+< Jahresabschluss ist auf bundesanzeiger.de durch ein Captcha geschützt – im Browser öffnen:
+< https://www.bundesanzeiger.de/pub/de/start
+! exit 0
+```
+
+### Neue Bekanntmachungen seit dem letzten Aufruf
+
+`neu` merkt sich den Stand unter `~/.local/state/bundesanzeiger-cli` (Rechte
+0600). Beim ersten Aufruf wird der Ausgangsstand gespeichert.
+
+```ux-session
+$ bundesanzeiger neu "Deutsche Bahn AG"
+< Erster Aufruf – Ausgangsstand gespeichert.
+< Neueste Bekanntmachung: 22.07.2026 · Hinweisbekanntmachung (gemäß § 62 Abs. 4 Satz 3 i.V.m. Abs. 3 UmwG)
+< Beim nächsten Aufruf erscheinen nur neuere Bekanntmachungen.
+! exit 0
+```
+
+### Keine Treffer
+
+Ein Suchbegriff ohne Treffer endet mit Exit 0 und nennt den nächsten Schritt.
+
+```ux-session
+$ bundesanzeiger suche "zzzqqqxnichtvorhanden"
+< Keine Treffer für „zzzqqqxnichtvorhanden“.
+< Tipp: Schreibweise prüfen oder einen anderen Bereich wählen.
 ! exit 0
 ```
 
 ## Lesende Routen
 
-Hier stehen alle Routen, die die Sitzungen gegen den Fake-Server brauchen. `path` wird ohne Querystring exakt verglichen; `query_contains` ist optional. Der Login ist ein POST, löst aber keine Buchung aus und gehört deshalb zu den lesenden Routen. Die Antwortdateien liegen relativ zum Repo.
+Alle Requests der Sitzungen gegen den Fake-Server. Der versteckte Formularname
+wird aus `start.html` gelesen; die Reihenfolge der Routen ist wichtig, weil die
+Suche und die Startseite denselben Pfad `/pub/de/start` nutzen. Detail-Links aus
+den Fixtures sind relativ und werden gegen die Basis-URL aufgelöst.
 
 ```ux-routes
-[{"method":"POST","path":"/login","response":"tests/fixtures/ux/login_erfolg.html","status":200,"content_type":"text/html; charset=utf-8"},
- {"method":"GET","path":"/kurse","query_contains":"volleyball","response":"tests/fixtures/ux/kurse.html","status":200,"content_type":"text/html; charset=utf-8"},
- {"method":"GET","path":"/kurse/32304","response":"tests/fixtures/ux/kurs_32304.html","status":200,"content_type":"text/html; charset=utf-8"}]
+[{"method":"GET","path":"/pub/de/start","query_contains":"zzzqqq","response":"tests/fixtures/ux/suche_leer.html","status":200,"content_type":"text/html; charset=utf-8"},
+ {"method":"GET","path":"/pub/de/start","query_contains":"area_select=22","response":"tests/fixtures/ux/suche_finanzberichte.html","status":200,"content_type":"text/html; charset=utf-8"},
+ {"method":"GET","path":"/pub/de/start","query_contains":"fulltext=","response":"tests/fixtures/ux/suche_deutsche_bahn.html","status":200,"content_type":"text/html; charset=utf-8"},
+ {"method":"GET","path":"/pub/de/start","response":"tests/fixtures/ux/start.html","status":200,"content_type":"text/html; charset=utf-8"},
+ {"method":"GET","path":"/pub/de/suchergebnis","query_contains":"captcha=","response":"tests/fixtures/ux/detail_captcha.html","status":200,"content_type":"text/html; charset=utf-8"},
+ {"method":"GET","path":"/pub/de/suchergebnis","response":"tests/fixtures/ux/detail_bekanntmachung.html","status":200,"content_type":"text/html; charset=utf-8"}]
 ```
 
-## Formularschritte der schreibenden Aktion
+## Schreibende Aktion
 
-Die Liste enthält ALLE Requests in Reihenfolge, bis die Buchung endgültig bestätigt ist. `sends` nennt Feldnamen, die im Body vorkommen müssen; ein `*` am Ende erlaubt Präfix-Treffer. `before_confirm: true` ist nur für Schritte erlaubt, die vor der `[j/N]`-Frage laufen und nichts verbindlich auslösen, zum Beispiel das Öffnen des Formulars. `live: erkundet` heißt lesend auf der echten Seite gesehen, `live: synthetisch` heißt nachgebaut und als solches markiert.
-
-```ux-formsteps
-[{"id":"formular_oeffnen","method":"POST","path":"/buchen/32304","sends":["kurs_id"],"response":"tests/fixtures/ux/buchen_formular.html","before_confirm":true,"live":"erkundet"},
- {"id":"teilnehmerdaten","method":"POST","path":"/buchen/32304","sends":["vorname","nachname","email","statusgruppe"],"response":"tests/fixtures/ux/buchen_uebersicht.html","live":"synthetisch"},
- {"id":"verbindlich","method":"POST","path":"/buchen/32304","sends":["bestaetigungstoken"],"response":"tests/fixtures/ux/buchen_bestaetigt.html","final":true,"live":"synthetisch"}]
-```
-
-Der letzte Schritt trägt `"final": true`. Fehlt ein Schritt oder endet die Aktion nach dem ersten Request, meldet `ux_check.py` UX08 und `ux_session.py` bricht den Lauf ab. Beide Gates müssen grün sein, bevor der Build als fertig gilt.
+Keine. Das Tool liest ausschließlich; es gibt keinen Login und keine
+`ux-formsteps`. `UX09` entfällt daher (read-only). `UX07`/`UX08` sind mangels
+schreibender Aktion ebenfalls nicht anwendbar.
