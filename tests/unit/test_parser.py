@@ -60,6 +60,16 @@ def test_publication_text_contains_body():
     assert "Handelsregister" in text
 
 
+def test_publication_text_omits_duplicate_title_block():
+    text = parse_publication(fixture("detail_bekanntmachung.html"))
+    lines = text.splitlines()
+    assert lines[0].startswith(
+        "Die Deutsche Bahn Aktiengesellschaft mit Sitz in Berlin"
+    )
+    assert "Hinweisbekanntmachung" not in "\n".join(lines[:3])
+    assert lines[-1] == "Der Vorstand"
+
+
 def test_captcha_detail_is_detected():
     html = fixture("detail_captcha.html")
     assert looks_like_captcha(html, "https://example.invalid/pub/de/suchergebnis?x")

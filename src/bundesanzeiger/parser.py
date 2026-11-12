@@ -137,13 +137,16 @@ def first_with_class(node: Node, name: str) -> Node | None:
     return find_first(node, lambda item: has_class(item, name))
 
 
-def text_content(node: Node) -> str:
+def text_content(node: Node, *, exclude_classes: set[str] | None = None) -> str:
     parts: list[str] = []
+    excluded = exclude_classes or set()
 
     def visit(current: Node) -> None:
         for child in current.children:
             if isinstance(child, str):
                 parts.append(child)
+                continue
+            if excluded and child.classes() & excluded:
                 continue
             if child.tag in VOID_TAGS:
                 if child.tag == "br":
@@ -316,7 +319,9 @@ def parse_publication(html: str) -> str:
         raise ParseError(
             "Volltext nicht gefunden – keine gültige Session, erneut suchen."
         )
-    text = "\n".join(clean_lines(text_content(container)))
+    text = "\n".join(
+        clean_lines(text_content(container, exclude_classes={"z_titel"}))
+    )
     if not text:
         raise ParseError(
             "Volltext ist leer – keine gültige Session, erneut suchen."
