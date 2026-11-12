@@ -77,7 +77,7 @@ $ bundesanzeiger suche "Deutsche Bahn AG" --bereich finanzberichte
 <    Jahresabschluss zum Geschäftsjahr vom 01.01.2020 bis zum 31.12.2020
 $ bundesanzeiger lesen "Deutsche Bahn AG" --bereich finanzberichte
 < Jahresabschluss ist auf bundesanzeiger.de durch ein Captcha geschützt – im Browser öffnen:
-< https://www.bundesanzeiger.de/pub/de/start
+<~ https?://\S+
 ! exit 0
 ```
 
