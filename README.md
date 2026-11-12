@@ -1,34 +1,65 @@
-# cli-mcp-template
-Project template for CLIs and MCP servers with the shared test suite
+# bundesanzeiger-cli
 
-> **Hinweis:** Die Fabrik, die aus dieser Vorlage Werkzeuge baut (Workflow, UX-Gate, Pipeline), liegt jetzt in [smlfg/software-factory](https://github.com/smlfg/software-factory). Die Vorlage selbst bleibt vorerst hier.
+Bekanntmachungen im Bundesanzeiger live durchsuchen und lesen – Firmen-
+Bekanntmachungen nach Name finden, nach Bereich filtern und den Volltext im
+Terminal lesen. Jahresabschlüsse bleiben ein Index; ihr Captcha wird nie
+umgangen.
 
-## Schritt 0: UX-Spec zuerst
+## Schnellstart
 
-Der komplette Ablauf steht in [agent-learnings/WORKFLOW.md](https://github.com/smlfg/agent-learnings/blob/main/WORKFLOW.md).
+```bash
+pipx install git+https://github.com/smlfg/bundesanzeiger-cli
+bundesanzeiger suche "Deutsche Bahn AG"
+bundesanzeiger lesen "Deutsche Bahn AG"
+```
 
-1. Vor jeder Codezeile `docs/UX.md` ausfüllen (Vorlage liegt hier): die 3 wichtigsten Nutzer-Aufgaben als abtippbare Terminal-Sitzungen (pipx-Installation, `<tool> login`, Suche per Name, schreibende Aktion bis zur letzten Seite mit `[j/N]`), dazu alle live erkundeten Formularschritte und Fixtures unter `tests/fixtures/ux/`.
-2. Spec prüfen: `python3 tests/harness/ux_spec.py docs/UX.md`
-3. Gate nach dem Bau (beide müssen grün sein, sonst ist der Build nicht fertig):
-   - `python3 tests/harness/ux_check.py .` (UX-Lint UX01–UX08)
-   - `python3 tests/harness/ux_session.py .` (spielt die Sitzungen im Pseudo-Terminal gegen einen Fake-Server durch und prüft, dass ALLE Formularschritte gesendet werden)
+Die Installation landet mit `pipx` im PATH. Ein Login ist nicht nötig.
 
-`tests/harness/` wird unverändert aus agent-learnings übernommen.
+## Befehle
 
-## Pflichtregel: Bedienbarkeit für Menschen
+```bash
+bundesanzeiger suche FIRMA [--bereich gesellschaft|kapitalmarkt|gericht|finanzberichte|amtlich|verschiedenes|nichtamtlich] [--seit JJJJ-MM-TT] [--limit N]
+bundesanzeiger lesen FIRMA [NR] [--bereich ...]
+bundesanzeiger neu FIRMA [--bereich ...]
+```
 
-Jede CLI muss für Menschen bedienbar sein: `login`-Kommando statt nur Env, Namen statt IDs, interaktive Bestätigung im TTY, `--confirm` nur für Agenten, README-Schnellstart.
+- `suche` zeigt Datum, Bereich, Firma und Titel der Treffer.
+- `lesen` öffnet den Volltext des N-ten Treffers (Standard: 1). Bei mehreren
+  möglichen Firmen fragt das Tool im Terminal nach einer Nummer; ohne TTY gibt
+  es die Liste aus und endet mit Exit 2.
+- `neu` zeigt Bekanntmachungen seit dem letzten Aufruf. Der Stand liegt unter
+  `~/.local/state/bundesanzeiger-cli` (Rechte 0600).
+- `--json` liefert maschinenlesbares JSON; ohne TTY ist JSON der Standard.
 
-- `login` fragt im Terminal interaktiv (Passwort per getpass) und speichert im Schlüsselbund oder in einer Config-Datei mit 0600; dazu `logout` und `whoami`/`status` ohne Passwort-Ausgabe. Env-Variablen überschreiben die Config (für Agenten).
-- Namen/Freitext positional (`tool book volleyball`, `tool search fahrrad`); mehrere Treffer → nummerierte Auswahl im TTY, ohne TTY Liste + Exit Usage.
-- Schreibende Aktionen: im TTY „… verbindlich? [j/N]“; `--confirm`/`--yes` nur für Agenten; ohne TTY und ohne Flag kein Request.
-- Terminal-Ausgabe lesbar; JSON mit `--json` oder wenn stdout kein Terminal ist.
-- Fehler nennen den nächsten Schritt, keine Tracebacks bei EOF/Strg+C/fehlender optionaler Abhängigkeit.
-- README beginnt mit „Schnellstart“: `pipx install git+https://github.com/smlfg/<repo>`, Login, ein typischer Befehl.
+## Bereiche
 
-### Pflicht-QA-Prüfpunkt „Bedienbarkeit für Menschen“
+`gesellschaft` (Gesellschaftsbekanntmachungen), `kapitalmarkt`,
+`gericht` (Gerichtlicher Teil), `finanzberichte`
+(Rechnungslegung/Finanzberichte), `amtlich` (Amtlicher Teil),
+`verschiedenes` (Verschiedene Bekanntmachungen), `nichtamtlich`
+(Nichtamtlicher Teil).
 
-1. Frisch per `pipx install git+…` installieren, Befehl direkt im PATH aufrufen.
-2. Haupt-Use-Case nur mit `--help` im Pseudo-Terminal (`script -qc "…" /dev/null`) durchspielen: `login` interaktiv, Suche per Name, Bestätigungsfrage mit „N“ → nichts gesendet.
-3. Ohne Login: Fehlermeldung nennt `tool login`.
-4. FAIL, wenn eine Kernaktion nur über Env-Variablen, interne IDs oder `--confirm` erreichbar ist.
+## Jahresabschlüsse und Captcha
+
+Der Bereich `finanzberichte` bleibt als Index durchsuchbar. Der Volltext eines
+Jahresabschlusses ist auf bundesanzeiger.de durch ein Captcha geschützt. Das
+Tool löst es nicht, sondern nennt die Such-URL zum Öffnen im Browser und endet
+mit Exit 0; im JSON steht `captcha_erforderlich=true`.
+
+## Technik
+
+- Python >= 3.10, `argparse` + `httpx`/`requests`, `beautifulsoup4` bei Bedarf.
+- Höflich: wenige GET-Requests pro Aufruf, User-Agent mit Repo-URL, Cache für
+  10 Minuten unter `~/.cache/bundesanzeiger-cli`.
+- Basis-URL für Tests über `BUNDESANZEIGER_BASE_URL` überschreibbar.
+- Rein lesend, keine schreibenden Web-Aktionen und kein Login.
+
+## Entwicklung
+
+```bash
+python3 tests/harness/ux_check.py . --spec-only
+python3 tests/harness/ux_check.py .
+python3 tests/harness/ux_session.py .
+```
+
+Lizenz: MIT (Copyright smlfg).
